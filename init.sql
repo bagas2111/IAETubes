@@ -47,15 +47,17 @@ CREATE TABLE IF NOT EXISTS asset (
   nama VARCHAR(100) NOT NULL,
   tipe ENUM('ruangan', 'laboratorium', 'peralatan') NOT NULL,
   deskripsi TEXT,
-  status ENUM('tersedia', 'dipelihara') DEFAULT 'tersedia',
-  image_url VARCHAR(255)
+  status ENUM('tersedia', 'dipelihara', 'dipakai') DEFAULT 'tersedia',
+  image_url VARCHAR(255),
+  stok INT NOT NULL DEFAULT 1
 );
 
-INSERT INTO asset (id, kategori_id, nama, tipe, deskripsi, status, image_url) VALUES
-(1, 1, 'Auditorium Utama H.3', 'ruangan', 'Auditorium kapasitas 300 orang dengan AC sentral dan sound system lengkap.', 'tersedia', 'https://images.unsplash.com/photo-1517502884422-41eaaced0168?w=800&auto=format&fit=crop'),
-(2, 2, 'Laboratorium Rekayasa Perangkat Lunak', 'laboratorium', 'Lab komputer berspesifikasi tinggi untuk pemrograman, AI, dan grafis (30 PC).', 'tersedia', 'https://images.unsplash.com/photo-1562774053-701939374585?w=800&auto=format&fit=crop'),
-(3, 3, 'Kamera Sony Alpha A7 III', 'peralatan', 'Kamera mirrorless professional lengkap dengan lensa kit 28-70mm.', 'tersedia', 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800&auto=format&fit=crop'),
-(4, 1, 'Ruang Seminar B.204', 'ruangan', 'Ruang kelas kecil ber-AC kapasitas 40 orang untuk diskusi ilmiah.', 'dipelihara', 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop');
+INSERT INTO asset (id, kategori_id, nama, tipe, deskripsi, status, image_url, stok) VALUES
+(1, 1, 'Auditorium Utama H.3', 'ruangan', 'Auditorium kapasitas 300 orang dengan AC sentral dan sound system lengkap.', 'tersedia', 'https://images.unsplash.com/photo-1517502884422-41eaaced0168?w=800&auto=format&fit=crop', 1),
+(2, 2, 'Laboratorium Rekayasa Perangkat Lunak', 'laboratorium', 'Lab komputer berspesifikasi tinggi untuk pemrograman, AI, dan grafis (30 PC).', 'tersedia', 'https://images.unsplash.com/photo-1562774053-701939374585?w=800&auto=format&fit=crop', 2),
+(3, 3, 'Kamera Sony Alpha A7 III', 'peralatan', 'Kamera mirrorless professional lengkap dengan lensa kit 28-70mm.', 'tersedia', 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800&auto=format&fit=crop', 3),
+(4, 1, 'Ruang Seminar B.204', 'ruangan', 'Ruang kelas kecil ber-AC kapasitas 40 orang untuk diskusi ilmiah.', 'dipelihara', 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop', 1);
+
 
 -- ==========================================
 -- 3. DATABASE: booking_db (Table: booking)

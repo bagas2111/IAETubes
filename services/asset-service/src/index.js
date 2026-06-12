@@ -20,6 +20,26 @@ async function initDb() {
     try {
       pool = mysql.createPool(dbConfig);
       const connection = await pool.getConnection();
+
+      // Run database migrations/updates
+      try {
+        // Add stok column if missing
+        const [columns] = await connection.query("SHOW COLUMNS FROM asset LIKE 'stok'");
+        if (columns.length === 0) {
+          console.log('Adding stok column to asset table...');
+          await connection.query("ALTER TABLE asset ADD COLUMN stok INT NOT NULL DEFAULT 1");
+        }
+      } catch (migErr) {
+        console.error('Migration error adding stok column:', migErr.message);
+      }
+
+      try {
+        // Update status enum values to include 'dipakai'
+        await connection.query("ALTER TABLE asset MODIFY COLUMN status ENUM('tersedia', 'dipelihara', 'dipakai') DEFAULT 'tersedia'");
+      } catch (migErr) {
+        console.error('Migration error modifying status enum:', migErr.message);
+      }
+
       connection.release();
       console.log('✅ Connected to MySQL asset_db pool successfully');
       break;
@@ -62,6 +82,49 @@ async function getCategories() {
   }
 }
 
+// Helper to determine dynamic asset statuses based on active schedules
+async function resolveDynamicStatuses(assets, pool) {
+  let schedules = [];
+  try {
+    const [rows] = await pool.query('SELECT asset_id, date FROM schedule_db.schedule');
+    schedules = rows;
+  } catch (err) {
+    console.warn('⚠️ Could not fetch schedules for dynamic status:', err.message);
+  }
+
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
+  const getLocalDateString = (dateObj) => {
+    if (!(dateObj instanceof Date)) return String(dateObj);
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dayVal = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dayVal}`;
+  };
+
+  return assets.map(asset => {
+    const activeSchedulesCount = schedules.filter(s => 
+      String(s.asset_id) === String(asset.id) && 
+      getLocalDateString(s.date) === todayStr
+    ).length;
+
+    let resolvedStatus = asset.status;
+    if (asset.status === 'tersedia') {
+      if (activeSchedulesCount >= (asset.stok || 1)) {
+        resolvedStatus = 'dipakai';
+      }
+    }
+    return {
+      ...asset,
+      status: resolvedStatus
+    };
+  });
+}
+
 const typeDefs = `#graphql
   type Kategori {
     id: ID!
@@ -77,6 +140,7 @@ const typeDefs = `#graphql
     deskripsi: String
     status: String!
     image_url: String
+    stok: Int!
     kategori: Kategori
   }
 
@@ -87,7 +151,8 @@ const typeDefs = `#graphql
   }
 
   type Mutation {
-    addAsset(kategori_id: ID!, nama: String!, tipe: String!, deskripsi: String, status: String, image_url: String): Asset
+    addAsset(kategori_id: ID!, nama: String!, tipe: String!, deskripsi: String, status: String, image_url: String, stok: Int): Asset
+    updateAsset(id: ID!, kategori_id: ID, nama: String, tipe: String, deskripsi: String, status: String, image_url: String, stok: Int): Asset
     deleteAsset(id: ID!): Boolean
   }
 `;
@@ -97,8 +162,9 @@ const resolvers = {
     assets: async () => {
       try {
         const [rows] = await pool.query('SELECT * FROM asset');
+        const resolvedRows = await resolveDynamicStatuses(rows, pool);
         const categories = await getCategories();
-        return rows.map(asset => {
+        return resolvedRows.map(asset => {
           const cat = categories.find(c => String(c.id) === String(asset.kategori_id));
           return {
             ...asset,
@@ -113,7 +179,8 @@ const resolvers = {
       try {
         const [rows] = await pool.query('SELECT * FROM asset WHERE id = ?', [id]);
         if (rows.length === 0) return null;
-        const asset = rows[0];
+        const resolvedRows = await resolveDynamicStatuses(rows, pool);
+        const asset = resolvedRows[0];
         const categories = await getCategories();
         const cat = categories.find(c => String(c.id) === String(asset.kategori_id));
         return {
@@ -130,8 +197,9 @@ const resolvers = {
           'SELECT * FROM asset WHERE nama LIKE ? OR deskripsi LIKE ?',
           [`%${query}%`, `%${query}%`]
         );
+        const resolvedRows = await resolveDynamicStatuses(rows, pool);
         const categories = await getCategories();
-        return rows.map(asset => {
+        return resolvedRows.map(asset => {
           const cat = categories.find(c => String(c.id) === String(asset.kategori_id));
           return {
             ...asset,
@@ -144,7 +212,7 @@ const resolvers = {
     }
   },
   Mutation: {
-    addAsset: async (_, { kategori_id, nama, tipe, deskripsi, status, image_url }) => {
+    addAsset: async (_, { kategori_id, nama, tipe, deskripsi, status, image_url, stok }) => {
       // Validate category exists
       const categories = await getCategories();
       const catExists = categories.some(c => String(c.id) === String(kategori_id));
@@ -154,8 +222,8 @@ const resolvers = {
 
       try {
         const [result] = await pool.query(
-          'INSERT INTO asset (kategori_id, nama, tipe, deskripsi, status, image_url) VALUES (?, ?, ?, ?, ?, ?)',
-          [kategori_id, nama, tipe, deskripsi || '', status || 'tersedia', image_url || '']
+          'INSERT INTO asset (kategori_id, nama, tipe, deskripsi, status, image_url, stok) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [kategori_id, nama, tipe, deskripsi || '', status || 'tersedia', image_url || '', stok !== undefined ? stok : 1]
         );
         return {
           id: result.insertId,
@@ -164,7 +232,50 @@ const resolvers = {
           tipe,
           deskripsi,
           status: status || 'tersedia',
-          image_url
+          image_url,
+          stok: stok !== undefined ? stok : 1
+        };
+      } catch (err) {
+        throw new Error(err.message);
+      }
+    },
+    updateAsset: async (_, { id, kategori_id, nama, tipe, deskripsi, status, image_url, stok }) => {
+      const [rows] = await pool.query('SELECT * FROM asset WHERE id = ?', [id]);
+      if (rows.length === 0) {
+        throw new Error('Aset tidak ditemukan');
+      }
+      const current = rows[0];
+
+      const newKategoriId = kategori_id !== undefined ? kategori_id : current.kategori_id;
+      const newNama = nama !== undefined ? nama : current.nama;
+      const newTipe = tipe !== undefined ? tipe : current.tipe;
+      const newDeskripsi = deskripsi !== undefined ? deskripsi : current.deskripsi;
+      const newStatus = status !== undefined ? status : current.status;
+      const newImageUrl = image_url !== undefined ? image_url : current.image_url;
+      const newStok = stok !== undefined ? stok : current.stok;
+
+      if (kategori_id !== undefined) {
+        const categories = await getCategories();
+        const catExists = categories.some(c => String(c.id) === String(kategori_id));
+        if (!catExists) {
+          throw new Error('Kategori ID tidak ditemukan');
+        }
+      }
+
+      try {
+        await pool.query(
+          'UPDATE asset SET kategori_id = ?, nama = ?, tipe = ?, deskripsi = ?, status = ?, image_url = ?, stok = ? WHERE id = ?',
+          [newKategoriId, newNama, newTipe, newDeskripsi, newStatus, newImageUrl, newStok, id]
+        );
+        return {
+          id,
+          kategori_id: newKategoriId,
+          nama: newNama,
+          tipe: newTipe,
+          deskripsi: newDeskripsi,
+          status: newStatus,
+          image_url: newImageUrl,
+          stok: newStok
         };
       } catch (err) {
         throw new Error(err.message);
@@ -196,3 +307,4 @@ const { url } = await startStandaloneServer(server, {
 });
 
 console.log(`🚀 Asset Service ready at ${url}`);
+

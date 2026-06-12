@@ -3,7 +3,8 @@ import Swal from 'sweetalert2';
 import { 
   Building, Calendar, Layers, Search, Users, 
   CheckCircle2, XCircle, Clock, Plus, Trash2, 
-  ShieldCheck, User, Info, FileText, MapPin, Tag, LogOut, Lock, Key
+  ShieldCheck, User, Info, FileText, MapPin, Tag, LogOut, Lock, Key,
+  Edit
 } from 'lucide-react';
 
 const GATEWAY_URL = 'http://localhost:4000/';
@@ -97,6 +98,7 @@ export default function App() {
             deskripsi
             status
             image_url
+            stok
             kategori {
               nama
             }
@@ -310,6 +312,7 @@ export default function App() {
             deskripsi
             status
             image_url
+            stok
             kategori {
               nama
             }
@@ -539,6 +542,10 @@ export default function App() {
             <textarea id="ast-desc" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500" placeholder="Detail spesifikasi fasilitas"></textarea>
           </div>
           <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Stok Fasilitas</label>
+            <input id="ast-stock" type="number" min="1" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500" value="1">
+          </div>
+          <div>
             <label class="block text-xs font-semibold text-slate-400 mb-1">URL Gambar (Opsional)</label>
             <input id="ast-image" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500" placeholder="https://example.com/image.jpg">
           </div>
@@ -555,25 +562,112 @@ export default function App() {
         const tipe = document.getElementById('ast-type').value;
         const deskripsi = document.getElementById('ast-desc').value;
         const image_url = document.getElementById('ast-image').value;
+        const stok = parseInt(document.getElementById('ast-stock').value) || 1;
 
         if (!nama || !kategori_id || !tipe) {
           Swal.showValidationMessage('Nama, Kategori, dan Tipe wajib diisi!');
           return false;
         }
-        return { nama, kategori_id: String(kategori_id), tipe, deskripsi, status: 'tersedia', image_url };
+        return { nama, kategori_id: String(kategori_id), tipe, deskripsi, status: 'tersedia', image_url, stok };
       }
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
           const mutation = `
-            mutation AddAsset($kategori_id: ID!, $nama: String!, $tipe: String!, $deskripsi: String, $status: String, $image_url: String) {
-              addAsset(kategori_id: $kategori_id, nama: $nama, tipe: $tipe, deskripsi: $deskripsi, status: $status, image_url: $image_url) {
+            mutation AddAsset($kategori_id: ID!, $nama: String!, $tipe: String!, $deskripsi: String, $status: String, $image_url: String, $stok: Int) {
+              addAsset(kategori_id: $kategori_id, nama: $nama, tipe: $tipe, deskripsi: $deskripsi, status: $status, image_url: $image_url, stok: $stok) {
                 id
               }
             }
           `;
           await graphqlRequest(mutation, result.value);
           Swal.fire('Tersimpan!', 'Fasilitas baru berhasil ditambahkan.', 'success');
+          loadData();
+        } catch (err) {
+          Swal.fire('Error', err.message, 'error');
+        }
+      }
+    });
+  };
+
+  // Edit Asset
+  const handleEditAsset = (asset) => {
+    Swal.fire({
+      title: 'Edit Aset Fasilitas',
+      html: `
+        <div class="text-left text-sm text-slate-300 space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Nama Fasilitas</label>
+            <input id="edit-ast-name" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500" value="${asset.nama}">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Kategori</label>
+            <select id="edit-ast-cat" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+              ${categories.map(c => `<option value="${c.id}" ${String(c.id) === String(asset.kategori_id) ? 'selected' : ''}>${c.nama}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Tipe</label>
+            <select id="edit-ast-type" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+              <option value="ruangan" ${asset.tipe === 'ruangan' ? 'selected' : ''}>Ruangan</option>
+              <option value="laboratorium" ${asset.tipe === 'laboratorium' ? 'selected' : ''}>Laboratorium</option>
+              <option value="peralatan" ${asset.tipe === 'peralatan' ? 'selected' : ''}>Peralatan</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Deskripsi</label>
+            <textarea id="edit-ast-desc" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500">${asset.deskripsi || ''}</textarea>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Status</label>
+            <select id="edit-ast-status" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+              <option value="tersedia" ${asset.status === 'tersedia' ? 'selected' : ''}>Tersedia</option>
+              <option value="dipelihara" ${asset.status === 'dipelihara' ? 'selected' : ''}>Pemeliharaan (Under Maintenance)</option>
+              <option value="dipakai" ${asset.status === 'dipakai' ? 'selected' : ''}>Sedang Dipakai</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Stok Fasilitas</label>
+            <input id="edit-ast-stock" type="number" min="1" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500" value="${asset.stok || 1}">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">URL Gambar (Opsional)</label>
+            <input id="edit-ast-image" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500" value="${asset.image_url || ''}">
+          </div>
+        </div>
+      `,
+      background: '#0f172a',
+      color: '#f8fafc',
+      showCancelButton: true,
+      confirmButtonText: 'Simpan Perubahan',
+      confirmButtonColor: '#6366f1',
+      preConfirm: () => {
+        const nama = document.getElementById('edit-ast-name').value;
+        const kategori_id = document.getElementById('edit-ast-cat').value;
+        const tipe = document.getElementById('edit-ast-type').value;
+        const deskripsi = document.getElementById('edit-ast-desc').value;
+        const status = document.getElementById('edit-ast-status').value;
+        const image_url = document.getElementById('edit-ast-image').value;
+        const stok = parseInt(document.getElementById('edit-ast-stock').value) || 1;
+
+        if (!nama || !kategori_id || !tipe) {
+          Swal.showValidationMessage('Nama, Kategori, dan Tipe wajib diisi!');
+          return false;
+        }
+        return { id: asset.id, nama, kategori_id: String(kategori_id), tipe, deskripsi, status, image_url, stok };
+      }
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          const mutation = `
+            mutation UpdateAsset($id: ID!, $kategori_id: ID, $nama: String, $tipe: String, $deskripsi: String, $status: String, $image_url: String, $stok: Int) {
+              updateAsset(id: $id, kategori_id: $kategori_id, nama: $nama, tipe: $tipe, deskripsi: $deskripsi, status: $status, image_url: $image_url, stok: $stok) {
+                id
+              }
+            }
+          `;
+          await graphqlRequest(mutation, result.value);
+          Swal.fire('Terupdate!', 'Fasilitas berhasil diperbarui.', 'success');
           loadData();
         } catch (err) {
           Swal.fire('Error', err.message, 'error');
@@ -966,12 +1060,17 @@ export default function App() {
                       <span class={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         asset.status === 'tersedia' 
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                          : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          : asset.status === 'dipakai'
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
                       }`}>
-                        {asset.status === 'tersedia' ? 'Tersedia' : 'Pemeliharaan'}
+                        {asset.status === 'tersedia' ? 'Tersedia' : asset.status === 'dipakai' ? 'Sedang Dipakai' : 'Pemeliharaan'}
                       </span>
                       <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                         {asset.tipe}
+                      </span>
+                      <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                        Stok: {asset.stok || 1}
                       </span>
                     </div>
                   </div>
@@ -985,6 +1084,13 @@ export default function App() {
                     <div class="pt-4 border-t border-slate-800/60 flex items-center justify-between gap-4">
                       {isAdmin ? (
                         <div class="flex items-center gap-2 w-full">
+                          <button 
+                            onClick={() => handleEditAsset(asset)}
+                            class="flex items-center justify-center gap-1.5 flex-1 bg-amber-600/10 hover:bg-amber-600 text-amber-400 hover:text-white border border-amber-500/20 py-2 rounded-xl text-xs font-semibold transition"
+                          >
+                            <Edit class="h-3.5 w-3.5" />
+                            Edit
+                          </button>
                           <button 
                             onClick={() => handleDeleteAsset(asset.id)}
                             class="flex items-center justify-center gap-1.5 flex-1 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/20 py-2 rounded-xl text-xs font-semibold transition"

@@ -48,6 +48,7 @@ async function getAssets() {
         tipe
         status
         deskripsi
+        stok
       }
     }
   `;
@@ -101,6 +102,7 @@ const typeDefs = `#graphql
     tipe: String!
     status: String!
     deskripsi: String
+    stok: Int!
   }
 
   type Booking {
@@ -183,8 +185,8 @@ const resolvers = {
       if (!asset) {
         throw new Error('Aset tidak ditemukan');
       }
-      if (asset.status === 'dipelihara') {
-        throw new Error('Aset sedang dalam pemeliharaan');
+      if (asset.status !== 'tersedia') {
+        throw new Error(`Aset sedang tidak tersedia (Status: ${asset.status})`);
       }
 
       try {

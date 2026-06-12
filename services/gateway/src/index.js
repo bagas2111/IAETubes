@@ -41,6 +41,7 @@ const typeDefs = `#graphql
     deskripsi: String
     status: String!
     image_url: String
+    stok: Int!
     kategori: Kategori
   }
 
@@ -84,7 +85,8 @@ const typeDefs = `#graphql
     login(username: String!, sandi: String!): AuthResponse
     addKategori(nama: String!, deskripsi: String): Kategori
     deleteKategori(id: ID!): Boolean
-    addAsset(kategori_id: ID!, nama: String!, tipe: String!, deskripsi: String, status: String, image_url: String): Asset
+    addAsset(kategori_id: ID!, nama: String!, tipe: String!, deskripsi: String, status: String, image_url: String, stok: Int): Asset
+    updateAsset(id: ID!, kategori_id: ID, nama: String, tipe: String, deskripsi: String, status: String, image_url: String, stok: Int): Asset
     deleteAsset(id: ID!): Boolean
     addBooking(asset_id: ID!, user_id: ID!, user_name: String!, user_role: String!, deskripsi: String!, start_time: String!, end_time: String!): Booking
     updateBookingStatus(id: ID!, status: String!): Booking
@@ -139,7 +141,7 @@ const resolvers = {
         query: `
           query { 
             assets { 
-              id kategori_id nama tipe deskripsi status image_url 
+              id kategori_id nama tipe deskripsi status image_url stok
               kategori { id nama deskripsi } 
             } 
           }
@@ -153,7 +155,7 @@ const resolvers = {
         query: `
           query($id: ID!) {
             asset(id: $id) {
-              id kategori_id nama tipe deskripsi status image_url
+              id kategori_id nama tipe deskripsi status image_url stok
               kategori { id nama deskripsi }
             }
           }
@@ -168,7 +170,7 @@ const resolvers = {
         query: `
           query($query: String!) {
             searchAssets(query: $query) {
-              id kategori_id nama tipe deskripsi status image_url
+              id kategori_id nama tipe deskripsi status image_url stok
               kategori { id nama deskripsi }
             }
           }
@@ -295,9 +297,9 @@ const resolvers = {
     addAsset: async (_, args, { token }) => {
       const payload = {
         query: `
-          mutation($kategori_id: ID!, $nama: String!, $tipe: String!, $deskripsi: String, $status: String, $image_url: String) {
-            addAsset(kategori_id: $kategori_id, nama: $nama, tipe: $tipe, deskripsi: $deskripsi, status: $status, image_url: $image_url) {
-              id kategori_id nama tipe deskripsi status image_url
+          mutation($kategori_id: ID!, $nama: String!, $tipe: String!, $deskripsi: String, $status: String, $image_url: String, $stok: Int) {
+            addAsset(kategori_id: $kategori_id, nama: $nama, tipe: $tipe, deskripsi: $deskripsi, status: $status, image_url: $image_url, stok: $stok) {
+              id kategori_id nama tipe deskripsi status image_url stok
             }
           }
         `,
@@ -305,6 +307,20 @@ const resolvers = {
       };
       const data = await callService(SERVICES.asset, payload, token);
       return data.addAsset;
+    },
+    updateAsset: async (_, args, { token }) => {
+      const payload = {
+        query: `
+          mutation($id: ID!, $kategori_id: ID, $nama: String, $tipe: String, $deskripsi: String, $status: String, $image_url: String, $stok: Int) {
+            updateAsset(id: $id, kategori_id: $kategori_id, nama: $nama, tipe: $tipe, deskripsi: $deskripsi, status: $status, image_url: $image_url, stok: $stok) {
+              id kategori_id nama tipe deskripsi status image_url stok
+            }
+          }
+        `,
+        variables: args
+      };
+      const data = await callService(SERVICES.asset, payload, token);
+      return data.updateAsset;
     },
     deleteAsset: async (_, { id }, { token }) => {
       const payload = {

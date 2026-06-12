@@ -47,6 +47,7 @@ async function getAssets() {
         tipe
         status
         deskripsi
+        stok
       }
     }
   `;
@@ -71,6 +72,7 @@ const typeDefs = `#graphql
     tipe: String!
     status: String!
     deskripsi: String
+    stok: Int!
   }
 
   type Schedule {

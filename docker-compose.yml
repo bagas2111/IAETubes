@@ -1,0 +1,155 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: coba_docker_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pready"]
+      timeout: 10s
+      retries: 5
+
+  user-service:
+    build: ./services/user-service
+    container_name: user_service_app
+    ports:
+      - "4005:4005"
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=root_password
+      - PORT=4005
+      - JWT_SECRET=jwt_super_secret_key_123
+    depends_on:
+      db:
+        condition: service_started
+
+  category-service:
+    build: ./services/category-service
+    container_name: category_service_app
+    ports:
+      - "4001:4001"
+    volumes:
+      - ./services/category-service:/app
+      - /app/node_modules
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=root_password
+      - PORT=4001
+    depends_on:
+      db:
+        condition: service_started
+
+  asset-service:
+    build: ./services/asset-service
+    container_name: asset_service_app
+    ports:
+      - "4002:4002"
+    volumes:
+      - ./services/asset-service:/app
+      - /app/node_modules
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=root_password
+      - CATEGORY_SVC_URL=http://category-service:4001/
+      - PORT=4002
+    depends_on:
+      db:
+        condition: service_started
+      category-service:
+        condition: service_started
+
+  booking-service:
+    build: ./services/booking-service
+    container_name: booking_service_app
+    ports:
+      - "4003:4003"
+    volumes:
+      - ./services/booking-service:/app
+      - /app/node_modules
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=root_password
+      - ASSET_SVC_URL=http://asset-service:4002/
+      - SCHEDULE_SVC_URL=http://schedule-service:4004/
+      - PORT=4003
+    depends_on:
+      db:
+        condition: service_started
+      asset-service:
+        condition: service_started
+
+  schedule-service:
+    build: ./services/schedule-service
+    container_name: schedule_service_app
+    ports:
+      - "4004:4004"
+    volumes:
+      - ./services/schedule-service:/app
+      - /app/node_modules
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=root_password
+      - ASSET_SVC_URL=http://asset-service:4002/
+      - PORT=4004
+    depends_on:
+      db:
+        condition: service_started
+      asset-service:
+        condition: service_started
+
+  gateway:
+    build: ./services/gateway
+    container_name: gateway_service_app
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./services/gateway:/app
+      - /app/node_modules
+    environment:
+      - USER_SVC_URL=http://user-service:4005/
+      - CATEGORY_SVC_URL=http://category-service:4001/
+      - ASSET_SVC_URL=http://asset-service:4002/
+      - BOOKING_SVC_URL=http://booking-service:4003/
+      - SCHEDULE_SVC_URL=http://schedule-service:4004/
+      - PORT=4000
+      - JWT_SECRET=jwt_super_secret_key_123
+    depends_on:
+      user-service:
+        condition: service_started
+      category-service:
+        condition: service_started
+      asset-service:
+        condition: service_started
+      booking-service:
+        condition: service_started
+      schedule-service:
+        condition: service_started
+
+  frontend:
+    build: ./frontend
+    container_name: frontend_app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      gateway:
+        condition: service_started
+
+volumes:
+  mysql_data:
